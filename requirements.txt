@@ -6,4 +6,6 @@ sqlparse==0.3.1
 uWSGI==2.0.19.1
 django-leaflet==0.27.1
 django-crispy-forms==1.9.2
+requests==2.25.0
+opencage==1.2.2
 whitenoise==5.2.0

@@ -5,29 +5,89 @@
     {% load i18n %}
     {% load crispy_forms_tags %}
     {% load crispy_forms_filters %}
+    <!-- Load Esri Leaflet from CDN -->
+    <script src="https://unpkg.com/esri-leaflet@2.5.0/dist/esri-leaflet.js"
+            integrity="sha512-ucw7Grpc+iEQZa711gcjgMBnmd9qju1CICsRaryvX7HJklK0pGl/prxKvtHwpgm5ZHdvAil7YPxI1oWPOWK3UQ=="
+            crossorigin=""></script>
+
+    <!-- Load Esri Leaflet Geocoder from CDN -->
+    <link rel="stylesheet" href="https://unpkg.com/esri-leaflet-geocoder@2.3.3/dist/esri-leaflet-geocoder.css"
+          integrity="sha512-IM3Hs+feyi40yZhDH6kV8vQMg4Fh20s9OzInIIAc4nx7aMYMfo+IenRUekoYsHZqGkREUgx0VvlEsgm7nCDW9g=="
+          crossorigin="">
+    <script src="https://unpkg.com/esri-leaflet-geocoder@2.3.3/dist/esri-leaflet-geocoder.js"
+            integrity="sha512-HrFUyCEtIpxZloTgEKKMq4RFYhxjJkCiF5sDxuAokklOeZ68U2NPfh4MFtyIVWlsKtVbK5GD2/JzFyAfvT5ejA=="
+            crossorigin=""></script>
     <head>
         {% leaflet_js %}
         {% leaflet_css %}
-        {% block head_title %}{% trans "Leaflet Map:" %}{% endblock %}
-        {% block extra_header %}
-            <style>
-                #map {width: 70vw;height: 80vh;}
-            </style>
-        {% endblock %}
+        <fluid-container class="row" style = "margin:1%;align-items: center;justify-content: center;" id="searchContainer">
+            <div >
+                <input type="search"  id="searchEntry" placeholder="Search for a location:" >
+            </div>
+            <div style="margin-left:2%">
+                <button type="submit" class="btn btn-success" id="searchButton" >
+                    Search
+                </button>
+            </div>
+
+        </fluid-container>
+        <fluid-container class="row" style = "margin:1%;align-items: center;justify-content: center;">
+
+                <select id="ShowItems" style="padding: 10px;margin:2%">
+                    <option value="" disabled selected>Select option</option>
+                    <option value="leisure=golf_course">Golf Courses</option>
+                    <option value="shop">Shops</option>
+                    <option value="leisure=park">Parks</option>
+                    <option value="amenity=pub">Pubs</option>
+                    <option value="amenity=restaurant">Restaurants</option>
+                    <option value="amenity=cafe">Cafes</option>
+                    <option value="amenity=school">School</option>
+                    <option value="highway=bus_stop">Bus Stops</option>
+                </select>
+
+                <button type="button" class="btn btn-success" id="query-button" style="margin:2%;" >
+                Display places near me
+                </button>
+
+
+                <p id="showing" visibility="hidden"></p>
+
+            </fluid-container>
+
 
     </head>
+
     <body>
-        {% block body_content %}
-            {% leaflet_map "map" callback="window.map_init_basic" %}
-        {% endblock %}
+    {% block body %}
+        {% csrf_token %}
+
+        {% leaflet_map "map" callback="window.map_init_basic" %}
+        <div class="container">
+
+            <fluid-container class="row" style = "margin:2%;align-items: center;justify-content: center;">
+                <div style="margin-top: 0.5%;margin-left: 0.5%;margin-right:  0.5%;padding-bottom: 3vh">
+                    {% if user.is_authenticated %}
+                        <button class="btn btn-success" id="LastLocationButton"
+                            type="submit">Go to Last Search Location
+                        </button>
+                    {% endif %}
+                </div>
+                <div style="margin-top: 0.5%;margin-left: 0.5%;margin-right:  0.5%;padding-bottom: 3vh">
+                    <button class="btn btn-success" id="currentLocation"
+                            type="submit">Go to Current Location
+                    </button>
+                </div>
+            </fluid-container>
+
+        </div>
+    {% endblock %}
     </body>
     {% block extra_footer %}
-
         <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-autohide="false">
             <div class="toast-header">
                 <strong class="mr-auto">AWM2021</strong>
                 <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
-                <span aria-hidden="true">&times;</span>
+                    <span aria-hidden="true">&times;</span>
                 </button>
             </div>
             <div class="toast-body"></div>
@@ -35,122 +95,266 @@
 
         <script>
             $("#body_div").css({"top": $(".site-header").height() + 10, "position": "absolute"});
-                $(".toast").css({
-                    "top": ($(document).height() / 5),
-                    "left": ($(document).width() / 5),
-                    "position": "fixed",
-                    "z-index": 2000
-                });
+            $(".toast").css({
+                "top": ($(document).height() / 5),
+                "left": ($(document).width() / 5),
+                "position": "fixed",
+                "z-index": 2000
+            });
         </script>
-
-    <script>
-        let HOST = location.protocol + "//" + location.host;
-        let locationMarker;
-        let circle;
-        $("#map").css({
-            "width": "100%",
-            "height": $(document).height() - ($(".site-header").height() + $("#footer").height() + 45)});
-        function map_init_basic(map, options) {
-            let pos;
-            map.setView([53.5, -8.5], 11);
-            updateLocation(map);
-            map.on('touchstart click dblclick ', function () {
-                updateLocation(map);
+        <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+        <script src="https://unpkg.com/osmtogeojson@2.2.12/osmtogeojson.js"></script>
+        <script>
+            let HOST = location.protocol + "//" + location.host;
+            let globalMap;
+            let global_lat;
+            let global_lng;
+            let resultLayer;
+            let circle;
+            let locationMarker;
+            let SearchArea;
+            $("#map").css({
+                "width": "100%",
+                "height": $(window).height() / 2 - $(".navbar").height()
             });
-        }
-        function updateLocation(map) {
-            navigator.geolocation.getCurrentPosition(function (pos) {
-                setMapToCurrentLocation(map, pos);
-                update_db(pos);
-                },
-                function (err) {
-                },
-                {
-                    enableHighAccuracy: true,
-                    timeout: 30000
-                }
-            );
-        }
 
-        function setMapToCurrentLocation(map, pos) {
-            console.log("In setMapToCurrentLocation.");
+            function map_init_basic(map, options) {
+                navigator.geolocation.getCurrentPosition(function (pos) {
+                        map.setView([pos.coords.latitude, pos.coords.longitude], 10);
+                        var latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+                        updateMapLocation(latlng, map);
+                    }
+                );
 
-            //getting current location
-            let myLatLon = L.latLng(pos.coords.latitude, pos.coords.longitude);
+                $("#searchButton").click(function () {
+                    searchMap(map);
+                });
 
-            //using flyto to get to your current location
-            map.flyTo(myLatLon, 16);
-            if (locationMarker) {
-                map.removeLayer(locationMarker);
+                $("#currentLocation").click(function () {
+                    goToCurrentLocation(map);
+                });
+
+                document.getElementById("searchEntry").addEventListener("keypress", function (e) {
+                    if (e.key === "Enter") {
+                        searchMap(map);
+                    }
+                });
+                //setting map as global variable
+                globalMap = map;
             }
-            //setting marker to curremt location
-            var myIcon = L.icon({
-            iconUrl: '../static/leaflet/images/marker-icon.png',
-            iconSize: [38, 70],
-            iconAnchor: [20, 65],
-            popupAnchor: [-3, -50],
-            shadowUrl: '../static/leaflet/images/marker-shadow.png',
-            shadowSize: [68, 95],
-            shadowAnchor: [22, 94]
-            });
 
-            locationMarker = L.marker(myLatLon,{icon: myIcon}).addTo(map);
-
-            locationMarker.bindPopup("<b>This is your current location</b>").openPopup();
-            if (circle) {
-                map.removeLayer(circle);
-            }
-            circle = L.circle(myLatLon, {color: 'green',fillColor: 'green',fillOpacity: 0.3,radius: pos.coords.accuracy}).addTo(map);
-
-            $(".toast-body").html("Found location<br>Lat: " + myLatLon.lat + " Lon: " + myLatLon.lng);
-            $(".toast").toast('show');
-        }
-
-        function update_db(pos) {
-            let locString = pos.coords.longitude + ", " + pos.coords.latitude;
-
-            $.ajax({
-                type: "POST",
-                url :  "{% url 'updatedb' %}",
-                headers: {
-                    'X-CSRFToken': getCookie('csrftoken')
-                },
-                data: {
-                    point: locString
+            function searchMap(map) {
+                if ($(".invalidSearch")) {
+                    $(".invalidSearch").remove();
                 }
-            }).done(function (data, status, xhr) {
-                console.log(data["message"])
-                var originalMsg = $(".toast-body").html();
-                $(".toast-body").html(originalMsg + "<br/>Updated database<br/>" + data["message"]);
+                var search_entry = $("#searchEntry")
+                var search = search_entry.val();
 
-            }).fail(function (xhr, status, error) {
-                console.log('hi' + error);
-                var originalMsg = $(".toast-body").html();
-                $(".toast-body").html(originalMsg + "<br/>" + error);
-            }).always(function () {
-                console.log("find_loc_ed finished");
-                $(".toast").toast('show');
-            });
-        }
+                //resetting the searchbar
+                search_entry.val("");
+                //geocode the search to get co-ordinates
+                geocode(search, map);
+            }
 
-        function getCookie(name) {
-            var cookieValue = null;
-            if (document.cookie && document.cookie !== '') {
-                var cookies = document.cookie.split(';');
-                for (var i = 0; i < cookies.length; i++) {
-                    var cookie = jQuery.trim(cookies[i]);
-                    // Does this cookie string begin with the name we want?
-                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                        break;
+
+            async function updateMapLocation(latlng, map) {
+                goToSearchedLocation(map, latlng);
+                {% if user.is_authenticated %}
+                    await update_db(latlng);
+                    getLastSearchLocation(map);
+                {% endif %}
+            }
+
+             function goToSearchedLocation(map, latlng) {
+                map.flyTo(latlng, 10);
+                if (locationMarker) {
+                    map.removeLayer(locationMarker);
+                    map.removeLayer(SearchArea);
+                }
+                locationMarker = L.circle(latlng, {radius: 500, color: 'red'}).addTo(map);
+                SearchArea = L.circle(latlng, {radius: 10000, color: 'green'}).addTo(map);
+                if (resultLayer != undefined) {
+                    globalMap.removeLayer(resultLayer);
+                }
+                global_lat = latlng.lat;
+                global_lng = latlng.lng;
+
+            }
+
+            function goToCurrentLocation(map) {
+                navigator.geolocation.getCurrentPosition(function (pos) {
+                        var latlng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+                        updateMapLocation(latlng, map);
+                    }, function (err) {
+                    },
+                    {
+                        enableHighAccuracy: true, timeout: 30000
+                    }
+                );
+            }
+
+            function update_db(latlng) {
+                let location = latlng.lat + ", " + latlng.lng;
+                console.log(location);
+
+                $.ajax({
+                    type: "POST",
+                    url: "{% url 'updatedb' %}",
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    data: {
+                        point: location
+                    }
+                }).done(function (data, status, xhr) {
+                    console.log(data["message"])
+                    var originalMsg = $(".toast-body").html();
+                    $(".toast-body").html(originalMsg + "<br/>Updated database<br/>" + data["message"]);
+
+                }).fail(function (xhr, status, error) {
+                    console.log('update db' + error);
+                    var originalMsg = $(".toast-body").html();
+                    $(".toast-body").html(originalMsg + "<br/>" + error);
+                }).always(function (){});
+            }
+
+            function getCookie(name) {
+                var cookieValue = null;
+                if (document.cookie && document.cookie !== '') {
+                    var cookies = document.cookie.split(';');
+                    for (var i = 0; i < cookies.length; i++) {
+                        var cookie = jQuery.trim(cookies[i]);
+                        // Does this cookie string begin with the name we want?
+                        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                            break;
+                        }
                     }
                 }
+                return cookieValue;
             }
-            return cookieValue;
-        }
 
-    </script>
-{% endblock %}
+
+            function getLastSearchLocation(map) {
+                $.ajax({
+                    type: "GET",
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    url: HOST + "/getLastSearch/"
+                }).done(function (data, status, xhr) {
+                    updateLastSearch(data, map);
+                }).fail(function (xhr, status, error) {
+                    console.log(error);
+                });
+            }
+
+            function updateLastSearch(data, map) {
+
+                var button = document.getElementById("LastLocationButton");
+                button.setAttribute("type", "button");
+
+                console.log(data[0].last_location);
+                var latlong = data[0].last_location.substring(data[0].last_location.indexOf("(") + 1, data[0].last_location.length - 1);
+                var lat = latlong.substring(0, latlong.indexOf(" "));
+                var lon = latlong.substring(latlong.indexOf(" ") + 1);
+
+                button.setAttribute("lat", lat);
+                button.setAttribute("lon", lon);
+
+                $(button).click(function () {
+                    updateMapLocation(L.latLng(lat, lon), map);
+                });
+
+            }
+
+            function geocode(search, map) {
+                $.ajax({
+                    type: "POST",
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    url: HOST + "/geocode/",
+                    data: {
+                        search: search
+                    }
+                }).done(function (data, status, xhr) {
+                    if (data.location) {
+                        $("<div class='invalidSearch'>Location not found</div>").appendTo(".searchContainer");
+                    } else {
+                        updateMapLocation(L.latLng(data.lat, data.lng), map);
+                    }
+                }).fail(function (xhr, status, error) {
+                    console.log(error);
+                });
+            }
+
+            function buildOverpassApiUrl(searchChoice) {
+                var around = 'around:10000,' + global_lat + ',' + global_lng
+                var nodeQuery = 'node[' + searchChoice + '](' + around + ');';
+                var wayQuery = 'way[' + searchChoice + '](' + around + ');';
+                var relationQuery = 'relation[' + searchChoice + '](' + around + ');';
+                var query = '?data=[out:json][timeout:15];(' + nodeQuery + wayQuery + relationQuery + ');out body geom;';
+                var baseUrl = 'https://overpass-api.de/api/interpreter';
+                var resultUrl = baseUrl + query;
+                return resultUrl;
+            }
+
+            var geojsonMarkerOptions = {
+                radius: 8,
+                fillColor: "#ff7800",
+                color: "#000",
+                weight: 1,
+                opacity: 1,
+                fillOpacity: 0.8
+            };
+
+            $("#query-button").click(function () {
+                var searchFor = document.getElementById("ShowItems");
+                var searchChoice = searchFor.options[searchFor.selectedIndex].value;
+
+                if (resultLayer != undefined) {
+                    globalMap.removeLayer(resultLayer);
+                }
+
+                var overpassApiUrl = buildOverpassApiUrl(searchChoice);
+
+
+                $.get(overpassApiUrl, function (osmDataAsJson) {
+                    var resultAsGeojson = osmtogeojson(osmDataAsJson);
+                    resultLayer = L.geoJson(resultAsGeojson, {
+                        pointToLayer: function (feature, latlng) {
+                            return L.circleMarker(latlng, geojsonMarkerOptions);
+                        },
+                        style: function (feature) {
+                            return {color: "#ff0000"};
+                        },
+                        filter: function (feature, layer) {
+                            var isPolygon = (feature.geometry) && (feature.geometry.type !== undefined) && (feature.geometry.type === "Polygon");
+                            if (isPolygon) {
+                                feature.geometry.type = "Point";
+                                var polygonCenter = L.latLngBounds(feature.geometry.coordinates[0]).getCenter();
+                                feature.geometry.coordinates = [polygonCenter.lat, polygonCenter.lng];
+                            }
+                            return true;
+                        },
+                        onEachFeature: function (feature, layer) {
+                            var popupContent = "";
+                            popupContent = popupContent + "<dt>@id</dt><dd>" + feature.properties.type + "/" + feature.properties.id + "</dd>";
+                            var keys = Object.keys(feature.properties.tags);
+                            keys.forEach(function (key) {
+                                popupContent = popupContent + "<dt>" + key + "</dt><dd>" + feature.properties.tags[key] + "</dd>";
+                            });
+                            popupContent = popupContent + "</dl>"
+                            layer.bindPopup(popupContent);
+                        }
+                    }).addTo(globalMap);
+
+                });
+            });
+
+        </script>
+    {% endblock %}
 {% endblock content %}
 
 

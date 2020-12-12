@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'django.contrib.gis',
     'world',
     'users',
+    'pwa'
 ]
 
 MIDDLEWARE = [
@@ -166,18 +167,37 @@ else:
     # ALLOWED_HOSTS = ['.christopherbrady.xyz', 'localhost',]
 
 
-# Set DEPLOY_SECURE to True only for LIVE deployment
 
-'''if docker_config.DEPLOY_SECURE:
-    DEBUG = False
-    TEMPLATES[0]["OPTIONS"]["debug"] = False
-    # ALLOWED_HOSTS = ['.christopherbrady.xyz', 'localhost',]
-    CSRF_COOKIE_SECURE = True
-    SESSION_COOKIE_SECURE = True
-else:
-    DEBUG = True
-    TEMPLATES[0]["OPTIONS"]["debug"] = True
-    ALLOWED_HOSTS = ['*', ]
-    CSRF_COOKIE_SECURE = False
-    SESSION_COOKIE_SECURE = False
-'''
+PWA_APP_NAME = 'GeoDjango'
+PWA_APP_DESCRIPTION = "Pwa version of my geodjango web app"
+PWA_APP_THEME_COLOR = '#0A0302'
+PWA_APP_BACKGROUND_COLOR = '#ffffff'
+PWA_APP_DISPLAY = 'standalone'
+PWA_APP_SCOPE = '/'
+PWA_APP_ORIENTATION = 'any'
+PWA_APP_START_URL = '/'
+PWA_APP_STATUS_BAR_COLOR = 'default'
+PWA_APP_ICONS = [
+    {
+        #<div>Icons made by <a href="https://www.flaticon.com/authors/iconixar" title="iconixar">iconixar</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a></div>
+        'src': '/static/images/long_distance.png',
+        'sizes': '160x160'
+    }
+]
+PWA_APP_ICONS_APPLE = [
+    {
+        'src': '/static/images/long_distance.png',
+        'sizes': '160x160'
+    }
+]
+PWA_APP_SPLASH_SCREEN = [
+    {
+        'src': '/static/images/long_distance.png',
+        'media': '(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2)'
+    }
+]
+PWA_APP_DIR = 'ltr'
+PWA_APP_LANG = 'en-US'
+
+PWA_APP_DEBUG_MODE = False
+

@@ -1,3 +1,4 @@
+from django.core import serializers
 from django.http import JsonResponse
 from django.shortcuts import render, redirect
 from django.contrib import messages
@@ -5,6 +6,8 @@ from django.contrib.auth.decorators import login_required
 from .forms import UserRegisterForm
 from . import models
 from django.contrib.gis.geos import Point
+
+from .models import Profile
 
 
 def register(request):
@@ -50,5 +53,19 @@ def update_location(request):
         user_profile.save()
 
         return JsonResponse({"message": f"Set location to {point.wkt})."}, status=200)
+    except Exception as e:
+        return JsonResponse({"message": str(e)}, status=400)
+
+
+
+@login_required
+def get_last_search(request):
+    try:
+
+        locations = serializers.serialize('python', Profile.objects.filter(user=request.user)[:10].only('last_location'))
+        locations_json = [d['fields'] for d in locations]
+        locations_json = [{k: v for k, v in d.items() if k != 'user'} for d in locations_json]
+
+        return JsonResponse(locations_json, safe=False, status=200)
     except Exception as e:
         return JsonResponse({"message": str(e)}, status=400)
